@@ -1,0 +1,1 @@
+python run_classifier_ch.py --task_name=yesno --do_train=true --do_eval=true --data_dir=data/ --vocab_file=data/vocab.txt --model_config_file=config/cnn_bert_config.json --max_seq_length=50 --train_batch_size=64 --learning_rate=2e-5 --num_train_epochs=5.0 --output_dir=/tmp/yes_no_cls/

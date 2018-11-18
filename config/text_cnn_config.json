@@ -1,0 +1,12 @@
+{
+  "attention_probs_dropout_prob": 0.1,
+  "hidden_act": "relu",
+  "hidden_dropout_prob": 0.1,
+  "hidden_size": 100,
+  "initializer_range": 0.02,
+  "max_position_embeddings": 50,
+  "num_filters": 250,
+  "filter_sizes":[3,4,5],
+  "fc_dims": [128, 64],
+  "vocab_size": 28800
+}
