@@ -422,13 +422,10 @@ def main(_):
     if FLAGS.online_signature_export:
         def serving_input_fn():
             input_ids = tf.placeholder(dtype=tf.int32, shape=[None, FLAGS.max_seq_length], name="input_ids")
-            input_mask = tf.placeholder(dtype=tf.int32, shape=[None, FLAGS.max_seq_length], name="input_mask")
-            segment_ids = tf.placeholder(dtype=tf.int32, shape=[None, FLAGS.max_seq_length], name="segment_ids")
             label_ids = tf.placeholder(dtype=tf.int32, shape=[None], name="label_ids")
 
-            features = {'input_ids': input_ids, 'input_mask': input_mask, 'segment_ids': segment_ids,
-                        'label_ids': label_ids}
-            receiver_tensors = {'input_ids': input_ids, 'input_mask': input_mask, 'segment_ids': segment_ids}
+            features = {'input_ids': input_ids, 'label_ids': label_ids}
+            receiver_tensors = {'input_ids': input_ids}
 
             return tf.estimator.export.ServingInputReceiver(
                 features=features, receiver_tensors=receiver_tensors, receiver_tensors_alternatives={})
