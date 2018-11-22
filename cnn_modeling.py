@@ -142,7 +142,7 @@ class TextCNNModel(object):
                 hidden = self.pooled_output
                 for idx, dim in enumerate(config.fc_dims):
                     hidden = tf.layers.dense(hidden, units=dim, activation=tf.nn.relu)
-                    hidden = dropout(hidden, config.hidden_dropout_prob)
+                    hidden = tf.layers.dropout(hidden, rate=config.hidden_dropout_prob, training=is_training)
 
                 # shape [num_of_samples, num_of_labels]
                 logits = tf.layers.dense(hidden, num_labels, name="logits")
@@ -277,9 +277,12 @@ def text_cnn_layers(input_x,
                                     padding="VALID",
                                     name="conv1")
 
-            conv = tf.contrib.layers.batch_norm(conv, is_training=is_training, scope='cnn1')
-            b = tf.get_variable("b1-%s" % filter_size, [num_filters])
-            h = tf.nn.relu(tf.nn.bias_add(conv, b), "relu1")
+            biases = tf.get_variable(
+                'biases', [num_filters],
+                initializer=tf.constant_initializer(0.0))
+
+            # Apply nonlinearity
+            h = tf.nn.relu(tf.nn.bias_add(conv, biases), name="relu")
 
             # shape:[batch_size, sequence_length - filter_size + 1, 1, num_filters]
             # Maxpooling over the outputs
