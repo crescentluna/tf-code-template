@@ -14,7 +14,7 @@ import cnn_modeling
 import optimization
 import tokenization_ch
 import time
-from  datetime import  datetime
+from datetime import datetime
 from custom_export_output import CustomClassificationOutput
 from custom_export_output import DEFAULT_SERVING_SIGNATURE_DEF_KEY
 from custom_export_output import SIGNATURE_OUTPUT_NAME
@@ -56,7 +56,7 @@ flags.DEFINE_bool(
     "models and False for cased models.")
 
 flags.DEFINE_integer(
-    "max_seq_length", 128,
+    "max_seq_length", 100,
     "The maximum total input sequence length after tokenization. "
     "Sequences longer than this will be truncated, and sequences shorter "
     "than this will be padded.")
@@ -69,7 +69,7 @@ flags.DEFINE_bool("do_predict", False, "Whether to run the model in inference mo
 
 flags.DEFINE_bool("online_signature_export", False, "Whether to export signature for online")
 
-flags.DEFINE_integer("train_batch_size", 32, "Total batch size for training.")
+flags.DEFINE_integer("train_batch_size", 64, "Total batch size for training.")
 
 flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
 
@@ -77,7 +77,7 @@ flags.DEFINE_integer("predict_batch_size", 8, "Total batch size for predict.")
 
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
 
-flags.DEFINE_float("num_train_epochs", 3.0,
+flags.DEFINE_float("num_train_epochs", 4.0,
                    "Total number of training epochs to perform.")
 
 flags.DEFINE_float(
@@ -109,7 +109,6 @@ def create_model(bert_config, is_training, input_ids, labels, num_labels):
     # segment.
 
     with tf.variable_scope("loss"):
-
         logits = model.get_logits()
         probabilities = tf.nn.softmax(logits, dim=-1)
         log_probs = tf.nn.log_softmax(logits, dim=-1)
@@ -120,20 +119,23 @@ def create_model(bert_config, is_training, input_ids, labels, num_labels):
         return loss, per_example_loss, logits, probabilities
 
 
-def _def_logger_hook(loss, train_accuracy):
+def _def_logger_hook(max_steps, loss, train_accuracy):
     class _LoggerHook(tf.train.SessionRunHook):
         """Logs loss and runtime."""
+
         def __init__(self):
             self.avg_loss = None
             self.avg_accu = None
+            self.max_steps = max_steps
             self.decay = 0.9999
 
         def begin(self):
-            self._step = -1
+            self._step = -2
             self._start_time = time.time()
 
         def before_run(self, run_context):
-            self._step += 1
+            # strange: the step is real step/2, so multiple by 2
+            self._step += 2
             return tf.train.SessionRunArgs([loss, train_accuracy])  # Asks for value.
 
         def after_run(self, run_context, run_values):
@@ -154,12 +156,12 @@ def _def_logger_hook(loss, train_accuracy):
                 current_time = time.time()
                 duration = current_time - self._start_time
                 self._start_time = current_time
-
+                progress = float(self._step) / self.max_steps * 100.0
                 examples_per_sec = FLAGS.log_frequency * FLAGS.train_batch_size / duration
                 sec_per_batch = float(duration / FLAGS.log_frequency)
-                format_str = ('%s: step %d, loss = %.3f, train_accu: %.3f,'
+                format_str = ('%s: step %d,  progress: %.2f %%, loss = %.3f, train_accu: %.3f,'
                               ' (%.1f examples/sec; %.3f sec/batch)')
-                print(format_str % (datetime.now(), self._step, loss_value,
+                print(format_str % (datetime.now(), self._step, progress, loss_value,
                                     acc_value, examples_per_sec, sec_per_batch))
 
     return _LoggerHook
@@ -175,7 +177,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
         tf.logging.info("*** Features ***")
         # when invoking in online signature_export, features is a dict (name, tensor)
         # when invoking in other method(train/test), features is a DataSet object
-        if FLAGS.online_signature_export and params["online_signature_export"]:
+        if params.get("online_signature_export", False):
             for name in sorted(features.keys()):
                 tf.logging.info("  name = %s, shape = %s" % (name, features[name].shape))
             input_ids = features["input_ids"]
@@ -214,7 +216,6 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             train_accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions, label_ids), tf.float32))
             scaffold_fn = tf.train.Scaffold(local_init_op=tf.group(tf.local_variables_initializer(), init_train))
 
-
         if init_checkpoint:
             (assignment_map, initialized_variable_names
              ) = cnn_modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
@@ -234,13 +235,13 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
             train_op = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, extract_feature)
 
-            _LoggerHook = _def_logger_hook(total_loss, train_accuracy)
+            _LoggerHook = _def_logger_hook(num_train_steps, total_loss, train_accuracy)
 
             output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 train_op=train_op,
-                training_hooks=[_LoggerHook()],
+                training_chief_hooks=[_LoggerHook()],
                 scaffold=scaffold_fn
             )
 
@@ -355,8 +356,9 @@ def main(_):
 
     if FLAGS.do_train:
         train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
-        data_reader.file_based_convert_examples_to_features(
-            train_examples, label_list, FLAGS.max_seq_length, tokenizer, train_file)
+        if not tf.gfile.Exists(train_file):
+            data_reader.file_based_convert_examples_to_features(
+                train_examples, label_list, FLAGS.max_seq_length, tokenizer, train_file)
         tf.logging.info("***** Running training *****")
         tf.logging.info("  Num examples = %d", len(train_examples))
         tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
