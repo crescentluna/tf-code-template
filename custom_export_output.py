@@ -2,13 +2,12 @@ from tensorflow.python.estimator.export.export_output import ExportOutput
 from tensorflow.python.saved_model import signature_def_utils
 from tensorflow.python.saved_model.signature_constants import DEFAULT_SERVING_SIGNATURE_DEF_KEY
 
-
 DEFAULT_SERVING_SIGNATURE_DEF_KEY = DEFAULT_SERVING_SIGNATURE_DEF_KEY
 SIGNATURE_OUTPUT_NAME = "scores"
 
 
 class CustomClassificationOutput(ExportOutput):
-    """Represents the output of a BERT classification head.
+    """Represents the output of a classification head.
 
   If only scores is set, it is interpreted as providing a score for every class
   in order of class ID.
@@ -19,14 +18,14 @@ class CustomClassificationOutput(ExportOutput):
   """
 
     def __init__(self, scores=None):
-        """Constructor for `BERTClassificationOutput`.
-    Args:
-      scores: dict of string to `Tensor`.
+        """Constructor for `ClassificationOutput`.
+        Args:
+          scores: dict of string to `Tensor`.
 
-    Raises:
-      ValueError: if neither classes nor scores is set, or one of them is not a
-          `Tensor` with the correct dtype.
-    """
+        Raises:
+          ValueError: if neither classes nor scores is set, or one of them is not a
+              `Tensor` with the correct dtype.
+        """
         if (scores is not None
                 and not (isinstance(scores, dict))):
             raise ValueError('Classification scores must be a dict; '
