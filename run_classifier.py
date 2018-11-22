@@ -175,7 +175,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
         tf.logging.info("*** Features ***")
         # when invoking in online signature_export, features is a dict (name, tensor)
         # when invoking in other method(train/test), features is a DataSet object
-        if FLAGS.online_signature_export and params[FLAGS.online_signature_export]:
+        if FLAGS.online_signature_export and params["online_signature_export"]:
             for name in sorted(features.keys()):
                 tf.logging.info("  name = %s, shape = %s" % (name, features[name].shape))
             input_ids = features["input_ids"]
