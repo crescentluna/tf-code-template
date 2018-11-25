@@ -161,8 +161,8 @@ def _def_logger_hook(max_steps, loss, train_accuracy):
                 sec_per_batch = float(duration / FLAGS.log_frequency)
                 format_str = ('%s: step %d,  progress: %.2f %%, loss = %.3f, train_accu: %.3f,'
                               ' (%.1f examples/sec; %.3f sec/batch)')
-                print(format_str % (datetime.now(), self._step, progress, loss_value,
-                                    acc_value, examples_per_sec, sec_per_batch))
+                print(format_str % (datetime.now(), self._step, progress, self.avg_loss,
+                                    self.avg_accu, examples_per_sec, sec_per_batch))
 
     return _LoggerHook
 
