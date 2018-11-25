@@ -26,43 +26,46 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, extract_f
     """Creates an optimizer training op."""
     global_step = tf.train.get_or_create_global_step()
 
-    learning_rate = tf.constant(value=init_lr, shape=[], dtype=tf.float32)
+    # learning_rate = tf.constant(value=init_lr, shape=[], dtype=tf.float32)
 
     # Implements linear decay of the learning rate.
-    learning_rate = tf.train.polynomial_decay(
-        learning_rate,
-        global_step,
-        num_train_steps,
-        end_learning_rate=0.0,
-        power=1.0,
-        cycle=False)
+    learning_rate = tf.maximum(0.00001,
+        tf.train.exponential_decay(
+            init_lr,
+            global_step,
+            decay_steps=int(num_train_steps * 0.75),
+            decay_rate=0.1,
+            staircase=True))
 
     # Implements linear warmup. I.e., if global_step < num_warmup_steps, the
     # learning rate will be `global_step/num_warmup_steps * init_lr`.
-    if num_warmup_steps:
-        global_steps_int = tf.cast(global_step, tf.int32)
-        warmup_steps_int = tf.constant(num_warmup_steps, dtype=tf.int32)
-
-        global_steps_float = tf.cast(global_steps_int, tf.float32)
-        warmup_steps_float = tf.cast(warmup_steps_int, tf.float32)
-
-        warmup_percent_done = global_steps_float / warmup_steps_float
-        warmup_learning_rate = init_lr * warmup_percent_done
-
-        is_warmup = tf.cast(global_steps_int < warmup_steps_int, tf.float32)
-        learning_rate = (
-                (1.0 - is_warmup) * learning_rate + is_warmup * warmup_learning_rate)
+    # if num_warmup_steps:
+    #     global_steps_int = tf.cast(global_step, tf.int32)
+    #     warmup_steps_int = tf.constant(num_warmup_steps, dtype=tf.int32)
+    #
+    #     global_steps_float = tf.cast(global_steps_int, tf.float32)
+    #     warmup_steps_float = tf.cast(warmup_steps_int, tf.float32)
+    #
+    #     warmup_percent_done = global_steps_float / warmup_steps_float
+    #     warmup_learning_rate = init_lr * warmup_percent_done
+    #
+    #     is_warmup = tf.cast(global_steps_int < warmup_steps_int, tf.float32)
+    #     learning_rate = (
+    #             (1.0 - is_warmup) * learning_rate + is_warmup * warmup_learning_rate)
 
     # It is recommended that you use this optimizer for fine tuning, since this
     # is how the model was trained (note that the Adam m/v variables are NOT
     # loaded from init_checkpoint.)
-    optimizer = AdamWeightDecayOptimizer(
-        learning_rate=learning_rate,
-        weight_decay_rate=0.01,
-        beta_1=0.9,
-        beta_2=0.999,
-        epsilon=1e-6,
-        exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
+    # optimizer = AdamWeightDecayOptimizer(
+    #     learning_rate=learning_rate,
+    #     weight_decay_rate=0.01,
+    #     beta_1=0.9,
+    #     beta_2=0.999,
+    #     epsilon=1e-6,
+    #     exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
+
+    # optimizer
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate)
 
     if extract_feature:
         tvars = tf.trainable_variables(scope='output')
@@ -71,15 +74,15 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, extract_f
 
     grads = tf.gradients(loss, tvars)
 
-    # This is how the model was pre-trained.
-    (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
+    (grads, _) = tf.clip_by_global_norm(grads, clip_norm=5.0)
 
     train_op = optimizer.apply_gradients(
         zip(grads, tvars), global_step=global_step)
 
-    new_global_step = global_step + 1
-    train_op = tf.group(train_op, global_step.assign(new_global_step))
-    return train_op
+    # new_global_step = global_step + 1 why? global_step will add 1 itself
+    train_op = tf.group(train_op, global_step)
+    return train_op, learning_rate
+
 
 
 class AdamWeightDecayOptimizer(tf.train.Optimizer):

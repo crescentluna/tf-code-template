@@ -75,9 +75,13 @@ flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
 
 flags.DEFINE_integer("predict_batch_size", 8, "Total batch size for predict.")
 
-flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
+flags.DEFINE_float("learning_rate", 0.1, "The initial learning rate.")
 
-flags.DEFINE_float("num_train_epochs", 4.0,
+# tf.flags.DEFINE_float("min_learning_rate", 0.00001, "minimum learning rate")
+#
+# tf.flags.DEFINE_integer("max_grad_norm", 5, "max gradient normalization")
+
+flags.DEFINE_float("num_train_epochs", 5.0,
                    "Total number of training epochs to perform.")
 
 flags.DEFINE_float(
@@ -119,7 +123,7 @@ def create_model(bert_config, is_training, input_ids, labels, num_labels):
         return loss, per_example_loss, logits, probabilities
 
 
-def _def_logger_hook(max_steps, loss, train_accuracy):
+def _def_logger_hook(max_steps, loss, train_accuracy, lr_rate_now):
     class _LoggerHook(tf.train.SessionRunHook):
         """Logs loss and runtime."""
 
@@ -127,29 +131,30 @@ def _def_logger_hook(max_steps, loss, train_accuracy):
             self.avg_loss = None
             self.avg_accu = None
             self.max_steps = max_steps
-            self.decay = 0.9999
+            self.decay = 0.99
 
         def begin(self):
-            self._step = -2
+            self._step = -1
             self._start_time = time.time()
 
         def before_run(self, run_context):
-            # strange: the step is real step/2, so multiple by 2
-            self._step += 2
-            return tf.train.SessionRunArgs([loss, train_accuracy])  # Asks for value.
+            self._step += 1
+            return tf.train.SessionRunArgs([loss, train_accuracy, lr_rate_now])  # Asks for value.
 
         def after_run(self, run_context, run_values):
-            loss_value, acc_value = run_values.results
+            loss_value, acc_value, lr_rate_value = run_values.results
 
             # running avg
             if self.avg_loss is None:
                 self.avg_loss = loss_value
             else:
+                # print("step:%s, avg_loss: %.3f, batch_acc: %s" % (self._step, self.avg_accu, acc_value))
                 self.avg_loss = self.avg_loss * self.decay + (1 - self.decay) * loss_value
 
             if self.avg_accu is None:
                 self.avg_accu = acc_value
             else:
+                # print("step:%s, avg_acc: %.3f, batch_acc: %s" % (self._step, self.avg_accu, acc_value))
                 self.avg_accu = self.avg_accu * self.decay + (1 - self.decay) * acc_value
 
             if self._step % FLAGS.log_frequency == 0:
@@ -159,9 +164,9 @@ def _def_logger_hook(max_steps, loss, train_accuracy):
                 progress = float(self._step) / self.max_steps * 100.0
                 examples_per_sec = FLAGS.log_frequency * FLAGS.train_batch_size / duration
                 sec_per_batch = float(duration / FLAGS.log_frequency)
-                format_str = ('%s: step %d,  progress: %.2f %%, loss = %.3f, train_accu: %.3f,'
+                format_str = ('%s: step %d,  progress: %.2f %%, lr: %.5f, loss = %.3f, train_accu: %.3f,'
                               ' (%.1f examples/sec; %.3f sec/batch)')
-                print(format_str % (datetime.now(), self._step, progress, self.avg_loss,
+                print(format_str % (datetime.now(), self._step, progress, lr_rate_value, self.avg_loss,
                                     self.avg_accu, examples_per_sec, sec_per_batch))
 
     return _LoggerHook
@@ -232,10 +237,10 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
         output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
 
-            train_op = optimization.create_optimizer(
+            train_op, lr_rate_now = optimization.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, extract_feature)
 
-            _LoggerHook = _def_logger_hook(num_train_steps, total_loss, train_accuracy)
+            _LoggerHook = _def_logger_hook(num_train_steps, total_loss, train_accuracy, lr_rate_now)
 
             output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
@@ -366,8 +371,7 @@ def main(_):
         train_input_fn = data_reader.file_based_input_fn_builder(
             input_file=train_file,
             seq_length=FLAGS.max_seq_length,
-            is_training=True,
-            drop_remainder=True)
+            is_training=True)
         estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
 
     if FLAGS.do_eval:
@@ -386,8 +390,7 @@ def main(_):
         eval_input_fn = data_reader.file_based_input_fn_builder(
             input_file=eval_file,
             seq_length=FLAGS.max_seq_length,
-            is_training=False,
-            drop_remainder=eval_drop_remainder)
+            is_training=False)
 
         result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
 
@@ -407,8 +410,7 @@ def main(_):
         predict_input_fn = data_reader.file_based_input_fn_builder(
             input_file=predict_file,
             seq_length=FLAGS.max_seq_length,
-            is_training=False,
-            drop_remainder=False)
+            is_training=False)
         result = estimator.predict(input_fn=predict_input_fn)
 
         output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")

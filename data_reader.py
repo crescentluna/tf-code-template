@@ -5,6 +5,8 @@ import csv
 import os
 import abc
 
+
+pad_id = 0
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
 
@@ -74,17 +76,17 @@ class YesNoDataProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "yes_no_train_1000.txt")), "train")
+            self._read_tsv(os.path.join(data_dir, "yes_no_train.txt")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "yes_no_valid.txt")), "dev")
+            self._read_tsv(os.path.join(data_dir, "yes_no_test.txt")), "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "yes_no_test.txt")), "test")
+            self._read_tsv(os.path.join(data_dir, "yes_no_valid.txt")), "test")
 
     def get_labels(self):
         """See base class."""
@@ -94,8 +96,6 @@ class YesNoDataProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for (i, line) in enumerate(lines):
-            if i == 0:
-                continue
             guid = "%s-%s" % (set_type, i)
             text_a = tokenization_ch.convert_to_unicode(line[0])
             text_b = None
@@ -131,7 +131,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
 
     # Zero-pad up to the sequence length.
     while len(input_ids) < max_seq_length:
-        input_ids.append(0)
+        input_ids.append(pad_id)
 
     assert len(input_ids) == max_seq_length
 
@@ -181,8 +181,7 @@ def file_based_convert_examples_to_features(
         writer.write(tf_example.SerializeToString())
 
 
-def file_based_input_fn_builder(input_file, seq_length, is_training,
-                                drop_remainder):
+def file_based_input_fn_builder(input_file, seq_length, is_training):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
 
     name_to_features = {
@@ -213,7 +212,8 @@ def file_based_input_fn_builder(input_file, seq_length, is_training,
         d = tf.data.TFRecordDataset(input_file)
         if is_training:
             d = d.repeat()
-            d = d.shuffle(buffer_size=100)
+            d = d.shuffle(buffer_size=batch_size * 100, reshuffle_each_iteration=True)
+
 
         # for tf 1.11
         # d = d.apply(

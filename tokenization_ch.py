@@ -24,7 +24,7 @@ import six
 import tensorflow as tf
 
 
-UNKOWN_TOKEN = "[UNK]"
+UNKOWN_TOKEN = "unk"
 
 def convert_to_unicode(text):
   """Converts `text` to Unicode (if it's not already), assuming utf-8 input."""
@@ -113,7 +113,7 @@ class ChTokenizer(object):
 
   def tokenize(self, text):
     split_tokens = []
-    for token in self.basic_tokenizer.tokenize(text):
+    for token in text.split(" "):
         # no word piece
         split_tokens.append(token)
 
