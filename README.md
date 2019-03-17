@@ -1,2 +1,2 @@
-# tf-code-template
+# tf-estimator-code-template
 # A code template for tensorflow codes to make life easier.
